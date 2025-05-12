@@ -6,7 +6,7 @@ const path = require('path');
 require('dotenv').config();
 const debug = require("debug")("app:development");
 const Joi = require("joi");
-Joi.objectId = require("joi-objectId")(Joi);
+Joi.objectId = require("joi-objectid")(Joi);
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const helmet = require('helmet');
