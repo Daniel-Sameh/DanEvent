@@ -8,7 +8,7 @@ const ENV = process.env.NODE_ENV;
 const PORT = process.env.PORT || 8080;
 const debug = require("debug")(`app:${ENV}`);
 debug("Debugging enabled");
-console.log(process.env.MONGODB_URI);
+// console.log(process.env.MONGODB_URI);
 
 /**
  * Connect to mongoose asynchronously or bail out if it fails
