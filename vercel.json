@@ -8,8 +8,12 @@
     ],
     "routes": [
         {
-            "src": "/(.*)",
+            "src": "/api/(.*)",
             "dest": "index.js"
+        },
+        {
+            "src": "/(favicon.ico|robots.txt)",
+            "status": 204
         }
     ]
 }

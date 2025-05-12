@@ -34,10 +34,16 @@ const apiLimiter = rateLimit({
   message: 'Too many requests from this IP, please try again after 15 minutes'
 });
 
-app.use('/api/', apiLimiter);
-app.use('/api/', users);
-app.use('/api/events', events);
-
+app.use('/', apiLimiter);
+app.use('/', users);
+app.use('/events', events);
+app.use((req, res, next) => {
+    if (req.path === '/favicon.ico') {
+        res.status(204).end();
+    } else {
+        next();
+    }
+});
 //Connecting to the database
 config.connectToDatabase();
 
