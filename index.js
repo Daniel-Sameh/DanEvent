@@ -13,9 +13,11 @@ const helmet = require('helmet');
 const users = require('./routers/users');
 const events = require('./routers/events');
 
+app.set('trust proxy', 1); // Trust first proxy - required for rate limiting on Vercel
+app.enable('trust proxy'); // Required for rate limiting behind reverse proxies
+
 app.use(cors());
 app.use(helmet()); // Set security headers
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -31,7 +33,11 @@ app.use(express.urlencoded({ extended: true }));
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again after 15 minutes'
+  message: 'Too many requests from this IP, please try again after 15 minutes',
+  standardHeaders: true,
+  legacyHeaders: false,
+  trustProxy: true,
+  skipFailedRequests: true
 });
 
 app.use('/', apiLimiter);
