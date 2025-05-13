@@ -39,6 +39,7 @@ const EventSchema = new Schema({
     date:{
         type: Date,
         required: true,
+        set: (date) => new Date(date),
     },
     venue:{
         type: String,

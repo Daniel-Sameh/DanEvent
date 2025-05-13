@@ -87,19 +87,31 @@ router.get("/:id", async (req, res) => {
 router.post("/", auth(['admin']), async (req, res) => {
     console.log('POST /events route hit');
     const userId= req.user._id;
-    eventObject= {...req.body, createdBy: userId};
+
+    const normalizedDate= new Date(req.body.date);
+    normalizedDate.setUTCHours(0, 0, 0, 0);
+
+    const eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
     debug(userId);
+
     const { error } = validateEvent(eventObject);
     if (error) {
         return res.status(400).json({ message: error.details[0].message });
     }
 
-    const eventExists = await Events.findOne({ name: eventObject.name, date: eventObject.date });
-    if (eventExists) {
-        return res.status(400).json({ message: "Event already exists." });
-    }
-
     try {
+        const eventExists = await Events.findOne({ 
+            name: eventObject.name, 
+            date: {
+                $gte: normalizedDate,
+                $lt: new Date(normalizedDate.getTime() + 24 * 60 * 60 * 1000)
+            }
+        });
+
+        if (eventExists) {
+            return res.status(400).json({ message: "Event already exists." });
+        }
+        
         const event = new Events(eventObject);
         await event.save();
         res.status(201).json(event);
