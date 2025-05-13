@@ -12,6 +12,10 @@
             "dest": "index.js"
         },
         {
+            "src": "/(.*)",
+            "dest": "/index.js"
+        },
+        {
             "src": "/(favicon.ico|robots.txt)",
             "status": 204
         }

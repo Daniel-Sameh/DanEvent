@@ -40,9 +40,9 @@ const apiLimiter = rateLimit({
   skipFailedRequests: true
 });
 
-app.use('/', apiLimiter);
-app.use('/', users);
-app.use('/events', events);
+app.use('/api', apiLimiter);
+app.use('/api', users);
+app.use('/api/events', events);
 app.use((req, res, next) => {
     if (req.path === '/favicon.ico') {
         res.status(204).end();
