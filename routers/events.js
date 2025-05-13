@@ -9,6 +9,9 @@ const debug = require("debug")("app:dev");
 // const APIError = require("../shared/APIError");
 const auth = require("../middlewares/auth");
 const c = require("config");
+const cloudinary = require('../config/cloudinary');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
 
 
 router.use(express.json());
@@ -91,15 +94,34 @@ router.post("/", auth(['admin']), async (req, res) => {
     const normalizedDate= new Date(req.body.date);
     normalizedDate.setUTCHours(0, 0, 0, 0);
 
-    const eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
+    let eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
     debug(userId);
 
-    const { error } = validateEvent(eventObject);
-    if (error) {
-        return res.status(400).json({ message: error.details[0].message });
-    }
-
+    
     try {
+        if (req.file) {
+            // Convert buffer to base64
+            const b64 = Buffer.from(req.file.buffer).toString('base64');
+            const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+            
+            // Upload to Cloudinary
+            const uploadResponse = await cloudinary.uploader.upload(dataURI, {
+                folder: 'events',
+                resource_type: 'auto'
+            });
+            
+            eventObject.imageUrl = uploadResponse.secure_url;
+        } else if (!req.body.imageUrl) {
+            // If no image file and no imageUrl provided, set default image
+            eventObject.imageUrl = 'https://default-image-url.com/placeholder.jpg';
+        }
+
+        // Validate event object
+        const { error } = validateEvent(eventObject);
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
+        }
+        
         const eventExists = await Events.findOne({ 
             name: eventObject.name, 
             date: {
