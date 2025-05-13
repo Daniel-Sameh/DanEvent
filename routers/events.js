@@ -11,7 +11,28 @@ const auth = require("../middlewares/auth");
 const c = require("config");
 const cloudinary = require('../config/cloudinary');
 const multer = require('multer');
-const upload = multer({ storage: multer.memoryStorage() });
+const storage = multer.memoryStorage();
+const upload = multer({     
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB max file size
+    },
+    fileFilter: (req, file, cb) => {
+        // Accept images only
+        if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/i)) {
+            return cb(new Error('Only image files are allowed!'), false);
+        }
+        cb(null, true);
+    }
+}).fields([
+    { name: 'file', maxCount: 1 },
+    { name: 'name', maxCount: 1 },
+    { name: 'description', maxCount: 1 },
+    { name: 'price', maxCount: 1 },
+    { name: 'venue', maxCount: 1 },
+    { name: 'category', maxCount: 1 },
+    { name: 'date', maxCount: 1 }
+]);
 
 
 router.use(express.json());
@@ -87,22 +108,25 @@ router.get("/:id", async (req, res) => {
 // Post Requests:
 // Create a new event by an authorized user (admin)
 // Example: POST /api/events
-router.post("/", auth(['admin']), async (req, res) => {
+router.post("/", auth(['admin']), upload, async (req, res) => {
     console.log('POST /events route hit');
-    const userId= req.user._id;
-
-    const normalizedDate= new Date(req.body.date);
-    normalizedDate.setUTCHours(0, 0, 0, 0);
-
-    let eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
-    debug(userId);
-
+    
+    console.log("Request body:", req.body);
+    console.log("Request file:", req.file);
     
     try {
-        if (req.file) {
+        const userId= req.user._id;
+
+        const normalizedDate= new Date(req.body.date);
+        normalizedDate.setUTCHours(0, 0, 0, 0);
+        
+        let eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
+        // debug(userId);
+        if (req.files.file && req.files.file[0]) {
             // Convert buffer to base64
-            const b64 = Buffer.from(req.file.buffer).toString('base64');
-            const dataURI = `data:${req.file.mimetype};base64,${b64}`;
+            const fileData = req.files.file[0];
+            const b64 = Buffer.from(fileData.buffer).toString('base64');
+            const dataURI = `data:${fileData.mimetype};base64,${b64}`;
             
             // Upload to Cloudinary
             const uploadResponse = await cloudinary.uploader.upload(dataURI, {
