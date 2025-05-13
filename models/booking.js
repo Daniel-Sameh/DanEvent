@@ -9,6 +9,7 @@ const BookingSchema = new Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: "Users",
         required: true,
+        index: true,
     },
     eventId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -25,6 +26,8 @@ const BookingSchema = new Schema({
         default: "confirmed",
     },
 });
+
+BookingSchema.index({ userId: 1 }, { unique: true });
 
 const Bookings = mongoose.model("Bookings", BookingSchema);
 function validateBooking(booking) {

@@ -13,6 +13,7 @@ const EventSchema = new Schema({
     name:{
         type: String,
         required: true,
+        index: true,
     },
     description:{
         type: String,
@@ -40,6 +41,7 @@ const EventSchema = new Schema({
         type: Date,
         required: true,
         set: (date) => new Date(date),
+        index: true,
     },
     venue:{
         type: String,
@@ -50,6 +52,8 @@ const EventSchema = new Schema({
         required: true,
     },
 });
+
+EventSchema.index({ name: 1, date: 1 }, { unique: true });
 
 const Events = mongoose.model("Events", EventSchema);
 function validateEvent(event) {

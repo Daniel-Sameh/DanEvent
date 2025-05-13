@@ -24,7 +24,7 @@ async function connectToDatabase() {
 
   try {
     await mongoose.connect(MONGODB_URI, {
-       autoIndex: false,
+       autoIndex: true,
        
     });
     await mongoose.connection.db.admin().command({ ping: 1 });

@@ -21,7 +21,8 @@ const UserSchema = new Schema({
                 return emailRegex.test(v);
             },
             message:"Invalid email format"
-        }
+        },
+        index : true,
     },
     password: {
         type: String,
@@ -31,8 +32,11 @@ const UserSchema = new Schema({
     isAdmin: {
         type: Boolean,
         default: false,
+        index: true,
     },
 });
+
+UserSchema.index({ email: 1 }, { unique: true });
 
 UserSchema.methods.generateAuthToken = function () {
     const token = jwt.sign({
