@@ -1,4 +1,4 @@
-const {Events, validateEvent} = require("../models/event");
+const {Events, validateEvent, validateEventUpdate} = require("../models/event");
 const {Bookings} = require("../models/booking");
 const {Users} = require("../models/user");
 const express = require("express");
@@ -38,8 +38,9 @@ const upload = multer({
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
 
-// Get Requests:
+const cloudinaryService = require('../services/cloudinaryService');
 
+// Get Requests:
 // Get all events with pagination
 // Example: GET /api/events?page=2&limit=5
 router.get("/", async (req, res) => {
@@ -121,20 +122,14 @@ router.post("/", auth(['admin']), upload, async (req, res) => {
         normalizedDate.setUTCHours(0, 0, 0, 0);
         
         let eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
-        // debug(userId);
+        
         if (req.files.file && req.files.file[0]) {
-            // Convert buffer to base64
-            const fileData = req.files.file[0];
-            const b64 = Buffer.from(fileData.buffer).toString('base64');
-            const dataURI = `data:${fileData.mimetype};base64,${b64}`;
-            
-            // Upload to Cloudinary
-            const uploadResponse = await cloudinary.uploader.upload(dataURI, {
-                folder: 'events',
-                resource_type: 'auto'
-            });
-            
-            eventObject.imageUrl = uploadResponse.secure_url;
+            try {
+                const imageUrl = await cloudinaryService.uploadImage(req.files.file[0]);
+                eventObject.imageUrl = imageUrl;
+            } catch (uploadError) {
+                return res.status(400).json({ message: "Error uploading image" });
+            }
         } else if (!req.body.imageUrl) {
             // If no image file and no imageUrl provided, set default image
             eventObject.imageUrl = 'https://default-image-url.com/placeholder.jpg';
@@ -218,21 +213,59 @@ router.delete("/:id", auth(['admin']), async (req, res) => {
 
 // Update an existing event by an authorized user (admin)
 // Example: PUT /api/events/1234567890abcdef12345678
-router.put("/:id", auth(['admin']), async (req, res) => {
-    const { error } = validateEvent(req.body);
-    if (error) {
-        return res.status(400).json({ message: error.details[0].message });
-    }
+router.put("/:id", auth(['admin']), upload, async (req, res) => {
 
     try {
-        const event = await Events.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        if (!event) {
+        const existingEvent = await Events.findById(req.params.id);
+        if (!existingEvent) {
             return res.status(404).json({ message: "Event not found." });
         }
-        res.status(200).json(event);
+        const updateFields = {};
+        
+        // Only add fields that are present in the request
+        if (req.body.name) updateFields.name = req.body.name;
+        if (req.body.description) updateFields.description = req.body.description;
+        if (req.body.price) updateFields.price = req.body.price;
+        if (req.body.venue) updateFields.venue = req.body.venue;
+        if (req.body.category) updateFields.category = req.body.category;
+        if (req.body.imageUrl) updateFields.imageUrl = req.body.imageUrl;
+        
+        if(req.body.date) {
+            const normalizedDate= new Date(req.body.date);
+            normalizedDate.setUTCHours(0, 0, 0, 0);
+            updateFields.date = normalizedDate;
+        }
+
+        // If the image is provided through a file upload to cloudinary
+        if (req.files.file && req.files.file[0]) {
+            try {
+                const imageUrl = await cloudinaryService.uploadImage(req.files.file[0]);
+                updateFields.imageUrl = imageUrl;
+            } catch (uploadError) {
+                return res.status(400).json({ message: "Error uploading image" });
+            }
+        }
+        console.log("updateFields after file stuff=", updateFields);
+
+        //Validate the updated event data
+        const { error } = validateEventUpdate(updateFields);
+        console.log("error=", error);
+        if (error) {
+            return res.status(400).json({ message: error.details[0].message });
+        }
+
+        // Update the event
+        const updatedEvent = await Events.findByIdAndUpdate(
+            req.params.id, 
+            updateFields,
+            { new: true }
+        );
+        
+        res.status(200).json(updatedEvent);
+
     } catch (error) {
-        debug(error);
-        res.status(500).json({ message: "Internal Server Error." });
+        // debug(error);
+        res.status(500).json({ message: `Internal Server Error: ${error}.` });
     }
 });
 

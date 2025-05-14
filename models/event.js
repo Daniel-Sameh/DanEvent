@@ -70,6 +70,21 @@ function validateEvent(event) {
     return schema.validate(event, { abortEarly: false });
 }
 
+function validateEventUpdate(event) {
+    const schema = Joi.object({
+        name: Joi.string().min(3).max(100).optional(),
+        description: Joi.string().min(10).max(500).optional(),
+        imageUrl: Joi.string().optional().pattern(/^https:\/\/.+/i),
+        price: Joi.number().min(0).optional(),
+        date: Joi.date().optional(),
+        venue: Joi.string().optional(),
+        category: Joi.string().optional(),
+    });
+    return schema.validate(event, { abortEarly: false });
+}
+
+
 exports.eventSchema = EventSchema;
 exports.Events = Events;
 exports.validateEvent = validateEvent;
+exports.validateEventUpdate = validateEventUpdate;
