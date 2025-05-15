@@ -29,30 +29,35 @@ app.use(express.urlencoded({ extended: true }));
 }));*/ // Prevent NoSQL injection
 
 
-// Rate limiting
+// Configure rate limiting middleware to prevent abuse
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again after 15 minutes',
-  standardHeaders: true,
-  legacyHeaders: false,
-  trustProxy: true,
-  skipFailedRequests: true
+    windowMs: 15 * 60 * 1000, // 15 minutes window
+    max: 100,                  // Maximum 100 requests per IP within the window
+    message: 'Too many requests from this IP, please try again after 15 minutes',
+    standardHeaders: true,     // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false,      // Disable the `X-RateLimit-*` headers
+    trustProxy: true,          // Trust the X-Forwarded-For header for IP detection
+    skipFailedRequests: true   // Failed requests won't count against the rate limit
 });
 
-app.use('/api', apiLimiter);
-app.use('/api', users);
-app.use('/api/events', events);
+// Apply middleware and route handlers
+app.use('/api', apiLimiter);           // Apply rate limiting to all API routes
+app.use('/api', users);                // Mount user-related routes
+app.use('/api/events', events);        // Mount event-related routes
+
+// Handle favicon requests to prevent unnecessary processing
 app.use((req, res, next) => {
     if (req.path === '/favicon.ico') {
-        res.status(204).end();
+        res.status(204).end();         // Return empty response for favicon requests
     } else {
-        next();
+        next();                        // Continue to next middleware for other requests
     }
 });
+
 //Connecting to the database
 config.connectToDatabase();
 
+// Start the server and listen for incoming requests
 app.listen(config.PORT, () => {
-  console.log(`Server listening at http://localhost:${config.PORT}`);
+    console.log(`Server listening at http://localhost:${config.PORT}`);
 });

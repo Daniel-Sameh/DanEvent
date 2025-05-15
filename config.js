@@ -11,7 +11,15 @@ debug("Debugging enabled");
 // console.log(process.env.MONGODB_URI);
 
 /**
- * Connect to mongoose asynchronously or bail out if it fails
+ * Application configuration and environment variables
+ * @constant {String} APP_NAME - Application name
+ * @constant {String} ENV - Current environment (development/production)
+ * @constant {Number} PORT - Server port number
+ */
+
+/**
+ * Establishes MongoDB connection with error handling
+ * @throws {Error} If database connection fails
  */
 async function connectToDatabase() {
   const MONGODB_URI =
@@ -36,8 +44,8 @@ async function connectToDatabase() {
 }
 
 /**
- * Configuration middleware to enable cors and set some other allowed headers.
- *  You can also just use the 'cors' package.
+ * CORS middleware configuration
+ * Sets necessary headers for cross-origin requests
  */
 function globalResponseHeaders(request, response, next) {
   response.header("Access-Control-Allow-Origin", "*");

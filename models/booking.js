@@ -4,6 +4,13 @@ const config = require("../config");
 const jwt = require("jsonwebtoken");
 const Schema = mongoose.Schema;
 
+/**
+ * Booking Schema - Defines the structure for booking documents
+ * @property {ObjectId} userId - Reference to the user making the booking (indexed)
+ * @property {ObjectId} eventId - Reference to the booked event
+ * @property {Date} bookingDate - Date when booking was made (defaults to current date)
+ * @property {String} status - Booking status (either "confirmed" or "cancelled")
+ */
 const BookingSchema = new Schema({
     userId: {
         type: mongoose.Schema.Types.ObjectId,
@@ -27,9 +34,19 @@ const BookingSchema = new Schema({
     },
 });
 
+// Ensure one booking per user
 BookingSchema.index({ userId: 1 }, { unique: true });
 
+/**
+ * Model for interacting with bookings collection
+ */
 const Bookings = mongoose.model("Bookings", BookingSchema);
+
+/**
+ * Validates booking data against required schema
+ * @param {Object} booking - The booking object to validate
+ * @returns {Object} Validation result
+ */
 function validateBooking(booking) {
     const schema = Joi.object({
         userId: Joi.objectId().required(),

@@ -12,6 +12,20 @@ const auth = require("../middlewares/auth");
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
+/**
+ * User Routes
+ * Handles user authentication, registration, and management
+ * @module routers/users
+ */
+
+/**
+ * POST /api/register
+ * Registers a new user with hashed password
+ * @route POST /api/register
+ * @param {string} name - User's full name
+ * @param {string} email - User's email address
+ * @param {string} password - User's password (will be hashed)
+ */
 // Register a new user
 router.post("/register", async (req, res) => {
     const { name, password, email } = req.body;
@@ -48,6 +62,14 @@ router.post("/register", async (req, res) => {
     }
 });
 
+
+/**
+ * POST /api/login
+ * Authenticates user and returns JWT token
+ * @route POST /api/login
+ * @param {string} email - User's email address
+ * @param {string} password - User's password
+ */
 // Login a user
 router.post("/login", async (req, res) => {
     const { email, password } = req.body;
@@ -79,6 +101,13 @@ router.post("/login", async (req, res) => {
     }
 });
 
+
+/**
+ * PATCH /api/users/:id/role
+ * Toggles admin privileges for a user
+ * @route PATCH /api/users/:id/role
+ * @middleware auth(['admin']) - Requires admin privileges
+ */
 // Update user role with admin privileges
 router.patch("/:id/role", auth(['admin']), async (req, res) => {
     try {
@@ -97,6 +126,14 @@ router.patch("/:id/role", auth(['admin']), async (req, res) => {
         res.status(500).json({ message: "Internal Server Error." });
     }
 });
+
+
+/**
+ * GET /api/users
+ * Retrieves all users (admin only)
+ * @route GET /api/users
+ * @middleware auth(['admin']) - Requires admin privileges
+ */
 // Get all users with admin privileges
 router.get("/", auth(['admin']), async (req, res) => {
     try {

@@ -6,6 +6,13 @@ const jwt = require("jsonwebtoken");
 const Schema = mongoose.Schema;
 const bcrypt = require('bcrypt');
 
+/**
+ * User Schema - Defines the structure for user documents
+ * @property {String} name - User's full name
+ * @property {String} email - Unique email address (indexed)
+ * @property {String} password - Hashed password (min 6 characters)
+ * @property {Boolean} isAdmin - User role flag (indexed)
+ */
 const UserSchema = new Schema({
     name: {
         type: String,
@@ -36,8 +43,13 @@ const UserSchema = new Schema({
     },
 });
 
+// Ensure email uniqueness
 UserSchema.index({ email: 1 }, { unique: true });
 
+/**
+ * Generates a JWT token for user authentication
+ * @returns {String} JWT token containing user information
+ */
 UserSchema.methods.generateAuthToken = function () {
     const token = jwt.sign({
         _id: this._id,

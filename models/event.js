@@ -4,6 +4,17 @@ const config = require("../config");
 const jwt = require("jsonwebtoken");
 const Schema = mongoose.Schema;
 
+/**
+ * Event Schema - Defines the structure for event documents
+ * @property {ObjectId} createdBy - Reference to the user who created the event
+ * @property {String} name - Event name (indexed for faster queries)
+ * @property {String} description - Detailed event description
+ * @property {String} imageUrl - Optional URL for event image (must be HTTPS)
+ * @property {Number} price - Event ticket price (must be non-negative)
+ * @property {Date} date - Event date (indexed for faster queries)
+ * @property {String} venue - Optional event location
+ * @property {String} category - Event category for classification
+ */
 const EventSchema = new Schema({
     createdBy:{
         type: mongoose.Schema.Types.ObjectId,
@@ -53,9 +64,16 @@ const EventSchema = new Schema({
     },
 });
 
+// Compound index to ensure unique events (same name cannot occur on same date)
 EventSchema.index({ name: 1, date: 1 }, { unique: true });
 
 const Events = mongoose.model("Events", EventSchema);
+
+/**
+ * Validates a new event object against required schema
+ * @param {Object} event - The event object to validate
+ * @returns {Object} Validation result
+ */
 function validateEvent(event) {
     const schema = Joi.object({
         createdBy: Joi.objectId().required(),
@@ -70,6 +88,11 @@ function validateEvent(event) {
     return schema.validate(event, { abortEarly: false });
 }
 
+/**
+ * Validates event update data, making all fields optional
+ * @param {Object} event - The event update object to validate
+ * @returns {Object} Validation result
+ */
 function validateEventUpdate(event) {
     const schema = Joi.object({
         name: Joi.string().min(3).max(100).optional(),

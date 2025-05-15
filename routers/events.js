@@ -119,7 +119,6 @@ router.post("/", auth(['admin']), upload, async (req, res) => {
         const userId= req.user._id;
 
         const normalizedDate= new Date(req.body.date);
-        normalizedDate.setUTCHours(0, 0, 0, 0);
         
         let eventObject= { ...req.body, date: normalizedDate, createdBy: userId };
         
@@ -211,18 +210,25 @@ router.delete("/:id", auth(['admin']), async (req, res) => {
 });
 
 
-// Update an existing event by an authorized user (admin)
-// Example: PUT /api/events/1234567890abcdef12345678
+// Update an existing event
 router.put("/:id", auth(['admin']), upload, async (req, res) => {
-
+    /**
+     * Update an existing event
+     * @route PUT /api/events/:id
+     * @middleware auth(['admin']) - Ensures only admin users can update events
+     * @middleware upload - Handles multipart form data and file uploads
+     */
     try {
+        // Check if event exists in database
         const existingEvent = await Events.findById(req.params.id);
         if (!existingEvent) {
             return res.status(404).json({ message: "Event not found." });
         }
+
+        // Initialize object to store fields that need to be updated
         const updateFields = {};
         
-        // Only add fields that are present in the request
+        // Selectively update only the fields that are provided in the request
         if (req.body.name) updateFields.name = req.body.name;
         if (req.body.description) updateFields.description = req.body.description;
         if (req.body.price) updateFields.price = req.body.price;
@@ -230,13 +236,13 @@ router.put("/:id", auth(['admin']), upload, async (req, res) => {
         if (req.body.category) updateFields.category = req.body.category;
         if (req.body.imageUrl) updateFields.imageUrl = req.body.imageUrl;
         
+        // Handle date field separately to ensure proper date formatting
         if(req.body.date) {
-            const normalizedDate= new Date(req.body.date);
-            normalizedDate.setUTCHours(0, 0, 0, 0);
+            const normalizedDate = new Date(req.body.date);
             updateFields.date = normalizedDate;
         }
 
-        // If the image is provided through a file upload to cloudinary
+        // Handle image upload if a new file is provided
         if (req.files.file && req.files.file[0]) {
             try {
                 const imageUrl = await cloudinaryService.uploadImage(req.files.file[0]);
