@@ -8,7 +8,11 @@ require("dotenv").config();
 const debug = require("debug")("app:development");
 const APIError = require("../shared/APIError");
 const auth = require("../middlewares/auth");
+const upload = require('../middlewares/upload');
+const cache = require('../middlewares/cache');
+const redis = require('../utils/redis');
 
+const dummyHash = '$2b$10$invalidDummyHashUsedForTimingEqualization12345678901234567890';
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -26,8 +30,7 @@ router.use(express.urlencoded({ extended: true }));
  * @param {string} email - User's email address
  * @param {string} password - User's password (will be hashed)
  */
-// Register a new user
-router.post("/register", async (req, res) => {
+router.post("/register", upload.profile, async (req, res) => {
     const { name, password, email } = req.body;
     debug(req.body);
     // Validate the input
@@ -47,14 +50,26 @@ router.post("/register", async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // Create a new user
-        const newUser = new Users({
+        let newUser = new Users({
             name,
             password: hashedPassword,
             email,
             isAdmin: false,
         });
 
+        if (req.files.file && req.files.file[0]) {
+            try {
+                const imageUrl = await cloudinaryService.uploadImage(req.files.file[0]);
+                newUser.profileImageUrl = imageUrl;
+            } catch (uploadError) {
+                return res.status(400).json({ message: "Error uploading image" });
+            }
+        }
+
+
         await newUser.save();
+        await redis.del('users:all');
+        
         res.status(201).json({ message: "User registered successfully." });
     } catch (error) {
         debug(error);
@@ -83,6 +98,7 @@ router.post("/login", async (req, res) => {
         // Check if the user exists
         const user = await Users.findOne({ email });
         if (!user) {
+            await bcrypt.compare(password, dummyHash); // Timing attack mitigation
             return res.status(400).json({ message: "Invalid email or password." });
         }
 
@@ -119,6 +135,7 @@ router.patch("/:id/role", auth(['admin']), async (req, res) => {
         // Update the user role
         user.isAdmin = !user.isAdmin;
         await user.save();
+        await redis.del('users:all');
 
         res.status(200).json({ message: "User role updated successfully." });
     } catch (error) {
@@ -137,12 +154,118 @@ router.patch("/:id/role", auth(['admin']), async (req, res) => {
 // Get all users with admin privileges
 router.get("/", auth(['admin']), async (req, res) => {
     try {
-        const users = await Users.find();
-        res.status(200).json(users);
+        const usersData = await cache('users:all', 120, async () => {
+            const users = await Users.find().select('-password'); // exclude password
+            return users;
+        });
+
+        if (!usersData.data) {
+            return res.status(404).json({ message: "No users found." });
+        }
+        
+        res.status(200).json(usersData.data);
     } catch (error) {
         debug(error);
         res.status(500).json({ message: "Internal Server Error." });
     }
 });
+
+
+/**
+ * GET /api/users/:id
+ * Retrieves the profile of a user by ID.
+ * Uses Redis caching to optimize performance and reduce database load.
+ *
+ * @route GET /api/users/:id
+ * @middleware auth() - Requires the user to be logged in (any role)
+ * @returns {Object} 200 - User profile data excluding password
+ * @returns {Object} 404 - If the user is not found
+ * @returns {Object} 500 - On internal server error
+ *
+ */
+router.get("/account", auth(), async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const cacheKey = `user:${userId}`;
+
+        const userData = await cache(cacheKey, 120, () => 
+            Users.findById(req.params.id).select("-password")
+        );
+
+        if (!userData.data) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        res.status(200).json(userData.data);
+    } catch (error) {
+        debug(error);
+        res.status(500).json({ message: "Internal Server Error." });
+    }
+});
+
+/*
+ * PATCH /api/users/
+ * Updates the profile of the logged-in user.
+ * Uses Redis caching to optimize performance and reduce database load.
+ * @route PATCH /api/users/
+ * @middleware auth() - Requires the user to be logged in (any role)
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 400 - If required fields are missing
+ * @returns {Object} 404 - If the user is not found
+*/
+router.put("/", auth(), upload.profile, async (req, res) => {
+    const updatedFields = req.body;
+    const userId = req.user._id;
+
+    try {
+        // Check if the user exists
+        const user = await Users.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+        
+        // Define fields that should NOT be updated
+        const restrictedFields = ['_id', 'isAdmin', '__v'];
+
+        // Special handling for password
+        if (updatedFields.password) {
+            const salt = await bcrypt.genSalt(10);
+            updatedFields.password = await bcrypt.hash(updatedFields.password, salt);
+        }
+
+        // Update all fields except restricted ones
+        Object.keys(updatedFields).forEach(field => {
+            if (!restrictedFields.includes(field)) {
+                user[field] = updatedFields[field];
+            }
+        });
+
+        // Handle image upload if a new file is provided
+        if (req.files.file && req.files.file[0]) {
+            try {
+                const imageUrl = await cloudinaryService.uploadImage(req.files.file[0]);
+                user.profileImageUrl = imageUrl;
+            } catch (uploadError) {
+                return res.status(400).json({ message: "Error uploading image" });
+            }
+        }
+        
+        await user.save();
+        await redis.del(`user:${userId}`);
+        await redis.del('users:all');
+
+        const userResponse = user.toObject();
+        delete userResponse.password;
+
+        res.status(200).json({ 
+            message: "User profile updated successfully.",
+            user: userResponse
+        });
+    } catch (error) {
+        debug(error);
+        res.status(500).json({ message: "Internal Server Error." });
+    }
+});
+
 
 module.exports = router;

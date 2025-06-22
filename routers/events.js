@@ -10,30 +10,9 @@ const debug = require("debug")("app:dev");
 const auth = require("../middlewares/auth");
 const c = require("config");
 const cloudinary = require('../config/cloudinary');
-const multer = require('multer');
-const storage = multer.memoryStorage();
-const upload = multer({     
-    storage: storage,
-    limits: {
-        fileSize: 5 * 1024 * 1024, // 5MB max file size
-    },
-    fileFilter: (req, file, cb) => {
-        // Accept images only
-        if (!file.originalname.match(/\.(jpg|jpeg|png|gif)$/i)) {
-            return cb(new Error('Only image files are allowed!'), false);
-        }
-        cb(null, true);
-    }
-}).fields([
-    { name: 'file', maxCount: 1 },
-    { name: 'name', maxCount: 1 },
-    { name: 'description', maxCount: 1 },
-    { name: 'price', maxCount: 1 },
-    { name: 'venue', maxCount: 1 },
-    { name: 'category', maxCount: 1 },
-    { name: 'date', maxCount: 1 }
-]);
-
+const upload = require('../middlewares/upload');
+const cache = require('../middlewares/cache');
+const redis = require('../utils/redis');
 
 router.use(express.json());
 router.use(express.urlencoded({ extended: true }));
@@ -49,23 +28,25 @@ router.get("/", async (req, res) => {
         const limit = parseInt(req.query.limit) || 10; // Get limit, default to 10
         const skip = (page - 1) * limit; // Calculate skip value
         
-        // Get events with pagination
-        const events = await Events.find()
-            .skip(skip)
-            .limit(limit);
+        const cacheKey = `events:page:${page}:limit:${limit}`;
 
-        // Get total count for pagination metadata
-        const total = await Events.countDocuments();
-        
-        res.status(200).json({
-            events,
-            pagination: {
-                currentPage: page,
-                totalPages: Math.ceil(total / limit),
-                totalEvents: total,
-                hasMore: skip + events.length < total
-            }
+        const fetchedData = await cache(cacheKey, 120, async () => {
+            const events = await Events.find().skip(skip).limit(limit);
+            const total = await Events.countDocuments();
+
+            return {
+                events,
+                pagination: {
+                    currentPage: page,
+                    totalPages: Math.ceil(total / limit),
+                    totalEvents: total,
+                    hasMore: skip + events.length < total
+                }
+            };
         });
+
+        
+        res.status(200).json(fetchedData.data);
     } catch (error) {
         debug(error);
         res.status(404).json({ message: "No events were found." });
@@ -77,11 +58,18 @@ router.get("/", async (req, res) => {
 router.get("/bookings", auth(), async (req, res) => {
     console.log("GET /events/bookings route hit");
     const userId = req.user._id;
-    console.log("user=", userId);
+    // console.log("user=", userId);
 
     try {
-        const bookings = await Bookings.find({ userId }).select('userId').select('eventId').select('status').select('bookingDate');
-        res.status(200).json(bookings);
+        const cacheKey = `bookings:user:${userId}`;
+        const fetchedData = await cache(cacheKey, 200, async ()=>{
+            const bookings = await Bookings.find({ userId })
+                                        .select('userId').select('eventId')
+                                        .select('status').select('bookingDate');
+            return bookings;
+        });
+
+        res.status(200).json(fetchedData.data);
     } catch (error) {
         debug(error);
         res.status(500).json({ message: "Internal Server Error." });
@@ -92,11 +80,12 @@ router.get("/bookings", auth(), async (req, res) => {
 // Example: GET /api/events/1234567890abcdef12345678
 router.get("/:id", async (req, res) => {
     try {
-        const event = await Events.findById(req.params.id);
-        if (!event) {
+        const cacheKey = `event:${req.params.id}`;
+        const event = await cache(cacheKey, 120, async()=> {return await Events.findById(req.params.id)});
+        if (!event.data) {
             return res.status(404).json({ message: "Event not found." });
         }
-        res.status(200).json(event);
+        res.status(200).json(event.data);
     } catch (error) {
         debug(error);
         if (error.name === 'CastError') {
@@ -109,7 +98,7 @@ router.get("/:id", async (req, res) => {
 // Post Requests:
 // Create a new event by an authorized user (admin)
 // Example: POST /api/events
-router.post("/", auth(['admin']), upload, async (req, res) => {
+router.post("/", auth(['admin']), upload.event, async (req, res) => {
     console.log('POST /events route hit');
     
     console.log("Request body:", req.body);
@@ -154,6 +143,10 @@ router.post("/", auth(['admin']), upload, async (req, res) => {
         
         const event = new Events(eventObject);
         await event.save();
+
+        // Clear Cache
+        await redis.del('events:all');
+
         res.status(201).json(event);
     } catch (error) {
         debug(error);
@@ -170,11 +163,21 @@ router.post("/book/:id", auth(), async (req, res) => {
     const eventId = req.params.id;
     console.log("user=", userId);
     try {
-        const event = await Events.findById(eventId);
+        ;
+        const event = await cache(`event:${eventId}`, 200, async () => {return await Events.findById(eventId)});
         if (!event) {
             return res.status(404).json({ message: "Event not found." });
         }
-        
+
+        const bookingExists = await Bookings.findOne({
+            userId,
+            eventId,
+            status: "confirmed"
+        });
+
+        if(bookingExists){
+            return res.status(400).json({ message: "You have already booked this event." });
+        }
         const booking = new Bookings({
             userId,
             eventId,
@@ -182,6 +185,10 @@ router.post("/book/:id", auth(), async (req, res) => {
         });
         
         await booking.save();
+
+        // Clear user bookings cache
+        await redis.del(`bookings:user:${userId}`); 
+        
         res.status(201).json(booking);
     } catch (error) {
         debug(error);
@@ -198,10 +205,13 @@ router.post("/book/:id", auth(), async (req, res) => {
 // Example: DELETE /api/events/1234567890abcdef12345678
 router.delete("/:id", auth(['admin']), async (req, res) => {
     try {
-        const event = await Events.findByIdAndDelete(req.params.id);
-        if (!event) {
+        const fetchedEvent = await cache(`event:${req.params.id}`, 200, async () => {return await Events.findByIdAndDelete(req.params.id)});
+        
+        if (!fetchedEvent.data) {
             return res.status(404).json({ message: "Event not found." });
         }
+
+        await redis.del(`event:${req.params.id}`);
         res.status(200).json({ message: "Event deleted successfully." });
     } catch (error) {
         debug(error);
@@ -211,7 +221,7 @@ router.delete("/:id", auth(['admin']), async (req, res) => {
 
 
 // Update an existing event
-router.put("/:id", auth(['admin']), upload, async (req, res) => {
+router.put("/:id", auth(['admin']), upload.event, async (req, res) => {
     /**
      * Update an existing event
      * @route PUT /api/events/:id
@@ -220,8 +230,9 @@ router.put("/:id", auth(['admin']), upload, async (req, res) => {
      */
     try {
         // Check if event exists in database
-        const existingEvent = await Events.findById(req.params.id);
-        if (!existingEvent) {
+        const cacheKey = `event:${req.params.id}`;
+        const existingEvent = await cache(cacheKey, 200, async ()=> {return Events.findById(req.params.id)});
+        if (!existingEvent.data) {
             return res.status(404).json({ message: "Event not found." });
         }
 
@@ -266,7 +277,10 @@ router.put("/:id", auth(['admin']), upload, async (req, res) => {
             updateFields,
             { new: true }
         );
-        
+
+        // Update the cache
+        await redis.set(`event:${req.params.id}`, JSON.stringify(updatedEvent), 'EX', 200);
+
         res.status(200).json(updatedEvent);
 
     } catch (error) {

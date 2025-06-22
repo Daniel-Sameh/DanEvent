@@ -36,6 +36,17 @@ const UserSchema = new Schema({
         required: true,
         minlength: 6,
     },
+    profileImageUrl: {
+        type: String,
+        default: 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
+        validate: {
+        validator: function(v) {
+            const urlRegex = /^https:\/\/.+/i;
+            return urlRegex.test(v);
+        },
+        message: "Invalid URL format"
+        }
+    },
     isAdmin: {
         type: Boolean,
         default: false,
@@ -58,7 +69,7 @@ UserSchema.methods.generateAuthToken = function () {
         isAdmin: this.isAdmin,
         role: this.isAdmin ? "admin" : "user",
     }, process.env.JWT_SECRET, {
-        expiresIn: "24h",
+        expiresIn: "12h",
     });
     return token;
 }
@@ -77,6 +88,7 @@ function validateUser(user) {
         name: Joi.string().min(3).max(50).required(),
         email: Joi.string().email().required(),
         password: Joi.string().min(6).max(1024).required(),
+        profileImageUrl: Joi.string().optional().pattern(/^https:\/\/.+/i),
         isAdmin: Joi.boolean().optional(),
     });
     return schema.validate(user, { abortEarly: false });

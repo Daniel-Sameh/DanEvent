@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const config = require('config');
+const { Users } = require('../models/user');
 const APIError = require('../shared/APIError');
 
 /**
@@ -21,7 +22,7 @@ module.exports = (roles = []) => {
     
     // Check if token exists
     if (!token) {
-      return res.status(401).json({ title:'Unauthorized', message: 'No authentication token provided' });
+      return res.status(401).json({ status:'Unauthorized', message: 'No authentication token provided' });
     }
 
     try {
@@ -31,12 +32,34 @@ module.exports = (roles = []) => {
 
       // Role-based access control check
       if (roles.length && !roles.includes(req.user.role)) {
-        return res.status(403).json({ title:'Forbidden', message: 'Access denied' });
+        return res.status(403).json({ status:'Forbidden', message: 'Access denied' });
+      }
+
+      // Double-check admin status if required
+      if(roles.includes('admin')){
+        const userAdminData = await Users.findById(req.user._id).select('isAdmin');
+        if (!userAdminData || !userAdminData.isAdmin) {
+          return res.status(403).json({ status:'Forbidden', message: 'Access denied' });
+        }
       }
 
       next();
-    } catch (err) {
-      res.status(401).json({ title:'Unauthorized', message: 'Invalid token' });
+    } catch (error) {
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ 
+          status: 'error',
+          message: 'Invalid authentication token' 
+        });
+      }
+      
+      if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          status: 'error',
+          message: 'Authentication token expired' 
+        });
+      }
+      
+      next(error);
     }
   };
 };
