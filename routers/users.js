@@ -11,6 +11,7 @@ const auth = require("../middlewares/auth");
 const upload = require('../middlewares/upload');
 const cache = require('../middlewares/cache');
 const redis = require('../utils/redis');
+const cloudinaryService = require('../services/cloudinaryService');
 
 const dummyHash = '$2b$10$invalidDummyHashUsedForTimingEqualization12345678901234567890';
 
@@ -30,7 +31,7 @@ router.use(express.urlencoded({ extended: true }));
  * @param {string} email - User's email address
  * @param {string} password - User's password (will be hashed)
  */
-router.post("/register", upload.profile, async (req, res) => {
+router.post("/register", async (req, res) => {
     const { name, password, email } = req.body;
     debug(req.body);
     // Validate the input
@@ -56,16 +57,6 @@ router.post("/register", upload.profile, async (req, res) => {
             email,
             isAdmin: false,
         });
-
-        if (req.files.file && req.files.file[0]) {
-            try {
-                const imageUrl = await cloudinaryService.uploadImage(req.files.file[0]);
-                newUser.profileImageUrl = imageUrl;
-            } catch (uploadError) {
-                return res.status(400).json({ message: "Error uploading image" });
-            }
-        }
-
 
         await newUser.save();
         await redis.del('users:all');
@@ -112,6 +103,44 @@ router.post("/login", async (req, res) => {
 
         res.status(200).json({ token, user: { id: user._id, name: user.name, email: user.email } });
     } catch (error) {
+        debug(error);
+        res.status(500).json({ message: "Internal Server Error." });
+    }
+});
+
+/**
+ * POST /api/profile-image
+ * Uploads a profile image for the logged-in user
+ * @route POST /api/profile-image
+ * @middleware auth() - Requires the user to be logged in
+ * @param {file} profileImage - The profile image file to upload
+ * @returns {Object} 200 - Success message with image URL
+ * @returns {Object} 400 - If the file is not an image or exceeds the size limit
+ * @returns {Object} 500 - On internal server error
+ */
+router.post("/upload/profile-image", auth(), upload.profile, async (req, res) => {
+    try{
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ message: "No image provided" });
+        }
+        
+        const imageUrl = await cloudinaryService.uploadImage(req.files[0]);
+        
+        // Update user profile with image URL
+        const user = await Users.findByIdAndUpdate(
+            req.user._id,
+            { profileImageUrl: imageUrl },
+            { new: true }
+        ).select('-password');
+        
+        await redis.del(`user:${req.user._id}`);
+        await redis.del('users:all');
+        
+        res.status(200).json({ 
+            message: "Profile image updated successfully",
+            profileImageUrl: imageUrl
+        }); 
+    }catch (error) {
         debug(error);
         res.status(500).json({ message: "Internal Server Error." });
     }
@@ -188,9 +217,9 @@ router.get("/account", auth(), async (req, res) => {
         const userId = req.user._id;
         const cacheKey = `user:${userId}`;
 
-        const userData = await cache(cacheKey, 120, () => 
-            Users.findById(req.params.id).select("-password")
-        );
+        const userData = await cache(cacheKey, 120, async () => {
+            return await Users.findById(userId).select("-password");
+        });
 
         if (!userData.data) {
             return res.status(404).json({ message: "User not found." });
@@ -203,7 +232,7 @@ router.get("/account", auth(), async (req, res) => {
     }
 });
 
-/*
+/** 
  * PATCH /api/users/
  * Updates the profile of the logged-in user.
  * Uses Redis caching to optimize performance and reduce database load.
