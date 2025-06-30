@@ -90,18 +90,32 @@ DanEvent is a backend API designed to manage events, user registrations, booking
 ### 📅 **Events**
 
 - **GET** `/api/events`  
-  Fetch all events with pagination.  
-  **Query Params**: `page`, `limit`
+  Fetch all events with pagination, filtering and sorting.  
+  **Query Params**: 
+  - `page`: Page number (default: 1)
+  - `limit`: Number of items per page (default: 10)
+  - `category`: Filter events by category
+  - `startDate`: Filter events starting from this date (format: YYYY-MM-DD)
+  - `endDate`: Filter events until this date (format: YYYY-MM-DD)
+  - `sort`: Sort by date ('asc' or 'desc', default: 'asc')
+  - `booked`: Filter by booking status ('true', 'false', or 'all')
 
 - **GET** `/api/events/:id`  
   Fetch a single event by ID.
+
+- **GET** `/api/events/bookings`  
+  Fetch all bookings for the authenticated user.
 
 - **POST** `/api/events`  
   Create a new event (Admin only).  
   **Body**: `{ name, description, price, date, category, venue, file(image) }`
 
+- **POST** `/api/events/book/:id`  
+  Book an event by ID for the authenticated user.
+
 - **PUT** `/api/events/:id`  
-  Update an event by ID (Admin only).
+  Update an event by ID (Admin only).  
+  **Body**: Any of `{ name, description, price, date, category, venue, file(image) }`
 
 - **DELETE** `/api/events/:id`  
   Delete an event by ID (Admin only).
@@ -114,7 +128,7 @@ DanEvent is a backend API designed to manage events, user registrations, booking
   Fetch all bookings for the authenticated user.
 
 - **POST** `/api/events/book/:id`  
-  Book an event by ID.
+  Book an event by ID for the authenticated user.
 
 ---
 

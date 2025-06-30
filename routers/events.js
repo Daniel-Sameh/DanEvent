@@ -20,19 +20,72 @@ router.use(express.urlencoded({ extended: true }));
 const cloudinaryService = require('../services/cloudinaryService');
 
 // Get Requests:
-// Get all events with pagination
-// Example: GET /api/events?page=2&limit=5
+// Get all events with pagination, filtering, and sorting
+// Example: GET /api/events?page=2&limit=10&category=music&startDate=2025-06-30&endDate=2025-07-15&sort=asc&booked=true
 router.get("/", async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1; // Get page number, default to 1
         const limit = parseInt(req.query.limit) || 10; // Get limit, default to 10
         const skip = (page - 1) * limit; // Calculate skip value
         
-        const cacheKey = `events:page:${page}:limit:${limit}`;
+        // Extract filter parameters
+        const category = req.query.category;
+        const startDate = req.query.startDate ? new Date(req.query.startDate) : null;
+        const endDate = req.query.endDate ? new Date(req.query.endDate) : null;
+        const sortOrder = req.query.sort === 'desc' ? -1 : 1; // Default to ascending if not specified
+        const bookedFilter = req.query.booked;
+        
+        // If booked filter is provided, we need the user to be authenticated
+        let userId = null;
+        if (bookedFilter && req.query.booked !== 'all') {
+            if (!req.user) {
+                return res.status(401).json({ message: "Authentication required to filter by booking status." });
+            }
+            userId = req.user._id;
+        }
+        
+        // Build query object
+        const query = {};
+        if (category) query.category = category;
+        if (startDate || endDate) {
+            query.date = {};
+            if (startDate) query.date.$gte = startDate;
+            if (endDate) query.date.$lte = endDate;
+        }
+        
+        // Create cache key that includes all filter parameters
+        const cacheKey = `events:page:${page}:limit:${limit}:category:${category || 'all'}:startDate:${startDate || 'none'}:endDate:${endDate || 'none'}:sort:${sortOrder}:booked:${bookedFilter || 'all'}:userId:${userId || 'none'}`;
 
         const fetchedData = await cache(cacheKey, 120, async () => {
-            const events = await Events.find().skip(skip).limit(limit);
-            const total = await Events.countDocuments();
+            let events;
+            let total;
+            
+            // If filtering by booking status
+            if (bookedFilter === 'true' || bookedFilter === 'false') {
+                // First get all bookings for this user
+                const userBookings = await Bookings.find({ 
+                    userId,
+                    status: "confirmed"  
+                }).select('eventId').lean();
+                
+                const bookedEventIds = userBookings.map(booking => booking.eventId);
+                
+                // Adjust query based on booked filter
+                if (bookedFilter === 'true') {
+                    query._id = { $in: bookedEventIds };
+                } else if (bookedFilter === 'false') {
+                    query._id = { $nin: bookedEventIds };
+                }
+            }
+            
+            // Apply filters, sorting and pagination
+            events = await Events.find(query)
+                               .sort({ date: sortOrder })
+                               .skip(skip)
+                               .limit(limit);
+                               
+            // Count documents that match the filter
+            total = await Events.countDocuments(query);
 
             return {
                 events,
@@ -44,7 +97,6 @@ router.get("/", async (req, res) => {
                 }
             };
         });
-
         
         res.status(200).json(fetchedData.data);
     } catch (error) {
@@ -64,8 +116,8 @@ router.get("/bookings", auth(), async (req, res) => {
         const cacheKey = `bookings:user:${userId}`;
         const fetchedData = await cache(cacheKey, 200, async ()=>{
             const bookings = await Bookings.find({ userId })
-                                        .select('userId').select('eventId')
-                                        .select('status').select('bookingDate');
+                                        .populate('eventId')
+                                        .select('eventId status bookingDate');
             return bookings;
         });
 

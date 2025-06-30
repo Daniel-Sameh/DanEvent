@@ -109,9 +109,9 @@ router.post("/login", async (req, res) => {
 });
 
 /**
- * POST /api/profile-image
+ * POST /api/upload/profile-image
  * Uploads a profile image for the logged-in user
- * @route POST /api/profile-image
+ * @route POST /api/upload/profile-image
  * @middleware auth() - Requires the user to be logged in
  * @param {file} profileImage - The profile image file to upload
  * @returns {Object} 200 - Success message with image URL
@@ -148,9 +148,9 @@ router.post("/upload/profile-image", auth(), upload.profile, async (req, res) =>
 
 
 /**
- * PATCH /api/users/:id/role
+ * PATCH /api/:id/role
  * Toggles admin privileges for a user
- * @route PATCH /api/users/:id/role
+ * @route PATCH /api/:id/role
  * @middleware auth(['admin']) - Requires admin privileges
  */
 // Update user role with admin privileges
@@ -175,9 +175,9 @@ router.patch("/:id/role", auth(['admin']), async (req, res) => {
 
 
 /**
- * GET /api/users
+ * GET /api/
  * Retrieves all users (admin only)
- * @route GET /api/users
+ * @route GET /api/
  * @middleware auth(['admin']) - Requires admin privileges
  */
 // Get all users with admin privileges
@@ -201,11 +201,11 @@ router.get("/", auth(['admin']), async (req, res) => {
 
 
 /**
- * GET /api/users/:id
+ * GET /api/account
  * Retrieves the profile of a user by ID.
  * Uses Redis caching to optimize performance and reduce database load.
  *
- * @route GET /api/users/:id
+ * @route GET /api/account
  * @middleware auth() - Requires the user to be logged in (any role)
  * @returns {Object} 200 - User profile data excluding password
  * @returns {Object} 404 - If the user is not found
@@ -233,10 +233,10 @@ router.get("/account", auth(), async (req, res) => {
 });
 
 /** 
- * PATCH /api/users/
+ * PUT /api/
  * Updates the profile of the logged-in user.
  * Uses Redis caching to optimize performance and reduce database load.
- * @route PATCH /api/users/
+ * @route PUT /api/
  * @middleware auth() - Requires the user to be logged in (any role)
  * @returns {Object} 200 - Success message
  * @returns {Object} 400 - If required fields are missing
@@ -290,6 +290,69 @@ router.put("/", auth(), upload.profile, async (req, res) => {
             message: "User profile updated successfully.",
             user: userResponse
         });
+    } catch (error) {
+        debug(error);
+        res.status(500).json({ message: "Internal Server Error." });
+    }
+});
+
+/**
+ * DELETE /api/account
+ * Deletes the account of the logged-in user.
+ * Uses Redis to clear cached user data.
+ * @route DELETE /api/account
+ * @middleware auth() - Requires the user to be logged in (any role)
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 404 - If the user is not found
+ * @returns {Object} 500 - On internal server error
+ */
+router.delete("/account", auth(), async (req, res) => {
+    try {
+        const userId = req.user._id;
+
+        // Check if the user exists
+        const user = await Users.findById(userId);
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        // Delete the user
+        await Users.findByIdAndDelete(userId);
+        await redis.del(`user:${userId}`);
+        await redis.del('users:all');
+
+        res.status(200).json({ message: "User deleted successfully." });
+    } catch (error) {
+        debug(error);
+        res.status(500).json({ message: "Internal Server Error." });
+    }
+
+});
+
+/**
+ * DELETE /api/:id
+ * Deletes a user by ID (admin only).
+ * Uses Redis to clear cached user data.
+ * @route DELETE /api/:id
+ * @middleware auth(['admin']) - Requires admin privileges
+ * @param {string} id - User ID to delete
+ * @returns {Object} 200 - Success message
+ * @returns {Object} 404 - If the user is not found
+ * @returns {Object} 500 - On internal server error
+ */
+router.delete("/:id", auth(['admin']), async (req, res) => {
+    try {
+        // Check if the user exists
+        const user = await Users.findById(req.params.id);
+        if (!user) {
+            return res.status(404).json({ message: "User not found." });
+        }
+
+        // Delete the user
+        await Users.findByIdAndDelete(req.params.id);
+        await redis.del('users:all');
+
+        res.status(200).json({ message: "User deleted successfully." });
     } catch (error) {
         debug(error);
         res.status(500).json({ message: "Internal Server Error." });
