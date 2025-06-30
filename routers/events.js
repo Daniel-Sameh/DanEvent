@@ -116,9 +116,15 @@ router.get("/bookings", auth(), async (req, res) => {
         const cacheKey = `bookings:user:${userId}`;
         const fetchedData = await cache(cacheKey, 200, async ()=>{
             const bookings = await Bookings.find({ userId })
-                                        .populate('eventId')
-                                        .select('eventId status bookingDate');
-            return bookings;
+                                        .select('_id eventId userId status bookingDate')
+                                        .lean();
+            return bookings.map(booking => ({
+                _id: booking._id,
+                eventId: booking.eventId,
+                userId: booking.userId,
+                status: booking.status,
+                bookedDate: booking.bookingDate
+            }));
         });
 
         res.status(200).json(fetchedData.data);
