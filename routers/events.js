@@ -105,6 +105,24 @@ router.get("/", async (req, res) => {
     }
 });
 
+router.get("/categories", async (req, res) => {
+    try {
+        const cacheKey = 'events:categories';
+        const fetchedData = await cache(cacheKey, 900, async () => {
+            const categories = await Events.distinct('category');
+            return categories;
+        });
+        
+        // Flatten and split categories before returning
+        const categories = fetchedData.data.flatMap(cat => cat.split(", "));
+        
+        res.status(200).json(categories);
+    } catch (error) {
+        debug(error);
+        res.status(500).json({ message: "Internal Server Error." });
+    }
+});
+
 // Get all bookings for the authenticated user
 // Example: GET /api/events/bookings
 router.get("/bookings", auth(), async (req, res) => {
@@ -338,6 +356,7 @@ router.put("/:id", auth(['admin']), upload.event, async (req, res) => {
 
         // Update the cache
         await redis.set(`event:${req.params.id}`, JSON.stringify(updatedEvent), 'EX', 200);
+        await redis.del('events:all');
 
         res.status(200).json(updatedEvent);
 
