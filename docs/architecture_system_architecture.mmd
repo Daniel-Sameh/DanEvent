@@ -1,0 +1,27 @@
+flowchart TB
+    client([Client])
+    
+    subgraph DanEvent_Application [DanEvent Application]
+        express_server[Express Server]
+        api_layer[API Layer]
+        business_logic[Business Logic]
+        data_access[Data Access]
+    end
+    
+    subgraph External_Services [External Services]
+        mongodb[(MongoDB)]
+        redis[(Redis Cache)]
+        cloudinary{{Cloudinary}}
+    end
+    
+    client -->|HTTPS| express_server
+    express_server -->|processes requests| api_layer
+    api_layer -->|handles middleware & routing| business_logic
+    business_logic -->|manages models| data_access
+    data_access -->|queries| mongodb
+    
+    business_logic -.->|caches data| redis
+    business_logic -.->|handles image uploads| cloudinary
+    
+    %% Note: Includes validation logic (Joi), event management features, configuration
+    %% Note: Supports user management, event booking, and image handling workflows
