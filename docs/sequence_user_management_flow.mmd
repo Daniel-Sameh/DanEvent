@@ -1,0 +1,72 @@
+sequenceDiagram
+    autonumber
+    participant Client as Client
+    participant UserRouter as UserRouter
+    participant AuthMiddleware as AuthMiddleware
+    participant UploadMiddleware as UploadMiddleware
+    participant User as User Model
+    participant CloudinaryService as CloudinaryService
+    participant Database as MongoDB
+
+    %% Registration Flow
+    alt Registration
+        Client->>+UserRouter: POST /register
+        UserRouter->>+User: create with hashed password
+        User->>+Database: save document
+        Database-->>-User: confirm
+        User-->>-UserRouter: user object
+        UserRouter-->>-Client: token/user
+    end
+
+    %% Login Flow
+    alt Login
+        Client->>+UserRouter: POST /login
+        UserRouter->>+AuthMiddleware: validate credentials
+        AuthMiddleware-->>-UserRouter: pass/fail
+        UserRouter->>+User: find by email
+        User->>+Database: query
+        Database-->>-User: user data
+        User-->>-UserRouter: user found
+        UserRouter->>UserRouter: generate JWT
+        UserRouter-->>-Client: token/user
+    end
+
+    %% Profile Update Flow
+    alt Profile Update
+        Client->>+UserRouter: PUT /profile
+        UserRouter->>+AuthMiddleware: verify JWT
+        AuthMiddleware-->>-UserRouter: pass/fail
+        UserRouter->>+UploadMiddleware: process image
+        UploadMiddleware->>+CloudinaryService: uploadImage
+        CloudinaryService-->>-UploadMiddleware: image URL
+        UploadMiddleware-->>-UserRouter: image URL
+        UserRouter->>+User: update profile
+        User->>+Database: save updated
+        Database-->>-User: confirm
+        User-->>-UserRouter: updated user
+        UserRouter-->>-Client: updated user
+    end
+
+    %% Role Toggling Flow
+    alt Role Toggling
+        Client->>+UserRouter: PATCH /role
+        UserRouter->>+AuthMiddleware: verify admin
+        AuthMiddleware-->>-UserRouter: pass/fail
+        UserRouter->>+User: toggle role
+        User->>+Database: save updated
+        Database-->>-User: confirm
+        User-->>-UserRouter: updated user
+        UserRouter-->>-Client: updated user
+    end
+
+    %% User Deletion Flow
+    alt User Deletion
+        Client->>+UserRouter: DELETE /:id
+        UserRouter->>+AuthMiddleware: verify admin
+        AuthMiddleware-->>-UserRouter: pass/fail
+        UserRouter->>+User: delete
+        User->>+Database: delete document
+        Database-->>-User: confirm delete
+        User-->>-UserRouter: confirmed
+        UserRouter-->>-Client: success
+    end

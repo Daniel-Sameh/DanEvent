@@ -1,227 +1,154 @@
-# 🎉 DanEvent Backend API
+# DanEvent
 
-DanEvent is a backend API designed to manage events, user registrations, bookings, and role-based access control. This project is built using Node.js, Express, and MongoDB, with a focus on security, scalability, and maintainability.
+Backend API server for event management with user authentication, booking, and image handling.
 
-## ✨ Features
+![npm](https://img.shields.io/npm/v/DanEvent.svg?logo=npm)
+![](https://img.shields.io/badge/node-%3E%3D18.x-brightgreen.svg?logo=node.js)
+![](https://img.shields.io/badge/express-5.x-blue.svg?logo=express)
+![](https://img.shields.io/badge/mongodb-8.x-green.svg?logo=mongodb)
+![](https://img.shields.io/badge/redis-ioredis-red.svg?logo=redis)
 
-- 👥 **User Management**: Register, login, and manage user roles (admin/user).
-- 📅 **Event Management**: Create, update, delete, and fetch events with pagination.
-- 🎫 **Booking System**: Book events and view user-specific bookings.
-- 🔒 **Role-Based Access Control**: Admins can manage events and user roles.
-- 🛡️ **Security**: Implements JWT authentication, rate limiting, input sanitization, and secure headers.
-- 🚀 **Redis Caching**: Implemented Redis caching through Upstash, reducing response time from 600ms to 200ms (3x performance improvement).
-- ✅ **Validation**: Input validation using Joi.
-- ⚠️ **Error Handling**: Centralized error handling with custom APIError class.
+DanEvent is a RESTful API backend built with Express and MongoDB. It provides endpoints for managing events, user accounts, and bookings, with features including pagination, filtering, Redis-based caching, JWT authentication, and Cloudinary-powered image uploads.
 
----
+## Overview
 
-## 🚀 Installation
+DanEvent is a Node.js backend server that powers event management workflows. The application provides a complete API for creating, browsing, and booking events, alongside user registration and profile management. The entry point (`index.js`) initializes the Express server via `config.connectToDatabase()`, mounts middleware and routes, and starts listening on the configured port.
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd danEvent
-   ```
+Key responsibilities include:
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+- **Event Management** — CRUD operations for events with filtering, pagination, and category browsing
+- **User Management** — Registration, authentication, profile management, and role-based access control
+- **Booking System** — Event booking with confirmation status and duplicate prevention
+- **Image Handling** — Profile and event image uploads through Cloudinary
+- **Caching Layer** — Redis-based response caching to reduce database load
 
-3. Create a `.env` file in the root directory and configure the following variables:
-   ```env
-   NODE_ENV=development
-   PORT=8080
-   MONGODB_URI=<your-mongodb-uri>
-   JWT_SECRET=<your-jwt-secret>
-   REDIS_HOST=<your-upstash-redis-url>
-   CLOUDINARY_CLOUD_NAME=<your-cloudinary-cloud-name>
-   CLOUDINARY_API_KEY=<your-cloudinary-api-key>
-   CLOUDINARY_API_SECRET=<your-cloudinary-api-secret>
-   ```
+### Architecture
 
-4. Start the server:
-   ```bash
-   npm start
-   ```
+The application follows a modular structure:
 
-5. For development, use:
-   ```bash
-   npm run dev
-   ```
+| Directory | Purpose |
+|-----------|---------|
+| `config/` | Service configurations (Cloudinary) |
+| `middlewares/` | Authentication, caching, and file upload middleware |
+| `models/` | Mongoose schemas for Event, User, and Booking |
+| `routers/` | Express route handlers for API endpoints |
+| `services/` | CloudinaryService singleton for image operations |
+| `shared/` | Shared utilities (APIError class) |
+| `utils/` | Redis client initialization |
 
----
+Routes are mounted under two base paths:
+- **`/api`** — User-related endpoints (registration, login, profile, role management)
+- **`/api/events`** — Event and booking endpoints
 
-## 🔌 API Endpoints
+## Features
 
-### 🔐 **Authentication**
+- **JWT Authentication** — Token-based authentication with role-based access control (admin/user roles)
+- **Event CRUD** — Create, read, update, and delete events; write operations restricted to admin users
+- **Pagination & Filtering** — Query events by page, category, date range, and booking status
+- **Booking Management** — Book events with confirmation status and duplicate booking prevention
+- **Redis Caching** — Response caching with configurable TTL for events, users, bookings, and categories
+- **Cloudinary Image Upload** — Base64 data URI upload for profile and event images via a singleton service
+- **User Role Management** — Admin role toggling and admin-only user management endpoints
+- **Standardized Error Handling** — Consistent error responses through the `APIError` class with status, title, and message serialization
 
-- **POST** `/api/register`  
-  Register a new user.  
-  **Body**: `{ name, email, password }`
+## Requirements
 
-- **POST** `/api/login`  
-  Login and receive a JWT token.  
-  **Body**: `{ email, password }`
+- Node.js 18 or higher
+- MongoDB instance (local or hosted)
+- Redis instance
+- Cloudinary account (for image upload features)
 
----
+## Installation
 
-### 👥 **Users**
+```bash
+# Clone the repository
+git clone https://github.com/Daniel-Sameh/DanEvent.git
+cd DanEvent
 
-- **GET** `/api/`  
-  Get all users (Admin only).
-
-- **GET** `/api/account`  
-  Get the profile of the authenticated user.
-
-- **PUT** `/api/`  
-  Update the authenticated user's profile.  
-  **Body**: Various user profile fields
-
-- **POST** `/api/upload/profile-image`  
-  Upload a profile image for the authenticated user.  
-  **Body**: Form data with profile image
-
-- **PATCH** `/api/:id/role`  
-  Toggle user role between admin and user (Admin only).
-
----
-
-### 📅 **Events**
-
-- **GET** `/api/events`  
-  Fetch all events with pagination, filtering and sorting.  
-  **Query Params**: 
-  - `page`: Page number (default: 1)
-  - `limit`: Number of items per page (default: 10)
-  - `category`: Filter events by category
-  - `startDate`: Filter events starting from this date (format: YYYY-MM-DD)
-  - `endDate`: Filter events until this date (format: YYYY-MM-DD)
-  - `sort`: Sort by date ('asc' or 'desc', default: 'asc')
-  - `booked`: Filter by booking status ('true', 'false', or 'all')
-
-- **GET** `/api/events/:id`  
-  Fetch a single event by ID.
-
-- **GET** `/api/events/bookings`  
-  Fetch all bookings for the authenticated user.
-
-- **POST** `/api/events`  
-  Create a new event (Admin only).  
-  **Body**: `{ name, description, price, date, category, venue, file(image) }`
-
-- **POST** `/api/events/book/:id`  
-  Book an event by ID for the authenticated user.
-
-- **PUT** `/api/events/:id`  
-  Update an event by ID (Admin only).  
-  **Body**: Any of `{ name, description, price, date, category, venue, file(image) }`
-
-- **DELETE** `/api/events/:id`  
-  Delete an event by ID (Admin only).
-
----
-
-### 🎫 **Bookings**
-
-- **GET** `/api/events/bookings`  
-  Fetch all bookings for the authenticated user.
-
-- **POST** `/api/events/book/:id`  
-  Book an event by ID for the authenticated user.
-
----
-
-## 🔧 Middleware
-
-- **Authentication**: JWT-based authentication with role-based access control.
-- **Rate Limiting**: Limits requests to prevent abuse.
-- **Input Sanitization**: Protects against NoSQL injection.
-- **Secure Headers**: Uses Helmet to set HTTP headers.
-- **Caching**: Redis-based caching middleware for improved performance.
-- **File Upload**: Multer middleware for handling file uploads.
-
----
-
-## 🚀 Performance Optimization
-
-### Redis Caching Implementation
-
-This project implements Redis caching through Upstash to dramatically improve response times:
-
-- **Performance Boost**: Response times reduced from 600ms to 200ms (3x improvement).
-- **Cached Endpoints**: 
-  - Event listings with pagination
-  - Individual event details
-  - User bookings
-  - User profiles
-- **Cache Invalidation**: Automatic cache clearing on data updates to ensure fresh content.
-
-The caching system is designed with TTL (Time-To-Live) values optimized for each endpoint's specific needs, balancing between performance and data freshness.
-
-Future performance improvements are planned, including:
-- Further optimization of cache TTL values
-- Implementation of batch operations
-- Query optimization for MongoDB
-- Potential migration to serverless functions for specific high-traffic endpoints
-
----
-
-## 📁 Project Structure
-
-```
-danEvent/
-├── models/          # Mongoose schemas and validation logic
-├── routers/         # API route handlers
-├── middlewares/     # Custom middleware (e.g., auth, cache)
-├── services/        # External service integrations (e.g., cloudinary)
-├── utils/           # Utility functions (e.g., redis)
-├── config/          # Configuration modules (e.g., cloudinary)
-├── shared/          # Shared utilities (e.g., APIError)
-├── docs/            # API documentation
-├── index.js         # Entry point of the application
-├── config.js        # Configuration and database connection
-├── package.json     # Project metadata and dependencies
-├── vercel.json      # Vercel deployment configuration
-└── README.md        # Project documentation
+# Install dependencies
+npm install
 ```
 
----
+### Environment Configuration
 
-## 🛠️ Technologies Used
+The application requires configuration for the following services:
 
-- **Node.js**: Backend runtime.
-- **Express**: Web framework.
-- **MongoDB**: NoSQL database.
-- **Mongoose**: MongoDB object modeling.
-- **Redis**: High-performance caching via Upstash, reducing response times by 3x.
-- **Joi**: Input validation.
-- **JWT**: Authentication.
-- **Helmet**: Security headers.
-- **Rate Limiting**: Prevents abuse.
-- **dotenv**: Environment variable management.
-- **Multer**: File upload handling.
-- **Cloudinary**: Cloud storage for images.
+| Service | Purpose |
+|---------|---------|
+| MongoDB | Primary database for events, users, and bookings |
+| Redis | Response caching layer (`utils/redis.js` connects using environment-based configuration) |
+| Cloudinary | Image upload and storage (`config/cloudinary.js`) |
+| JWT Secret | Token signing for authentication |
 
----
+Set the appropriate environment variables (e.g., via a `.env` file or environment configuration) for the MongoDB connection, Redis host, Cloudinary credentials, JWT secret, and server port.
 
-## 🤝 Contributing
+## Quick Start
 
-1. Fork the repository.
-2. Create a new branch: `git checkout -b feature-name`.
-3. Commit your changes: `git commit -m 'Add feature'`.
-4. Push to the branch: `git push origin feature-name`.
-5. Open a pull request.
+```bash
+# Start the server
+npm start
+```
 
----
+The server initializes the database connection via `config.connectToDatabase()` and begins listening on the configured port. Verify the server is running by fetching event categories:
 
-## 📄 License
+```bash
+curl http://localhost:{PORT}/api/events/categories
+# Returns a JSON array of category strings
+```
 
-This project is licensed under the ISC License. See the `LICENSE` file for details.
+## Usage
 
----
+### Register a User
 
-## 📬 Contact
+```bash
+curl -X POST http://localhost:{PORT}/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Jane Doe", "email": "jane@example.com", "password": "securePass123"}'
+```
 
-For any inquiries or support, please contact the author: **DanielSameh** 📧
+### Login and Obtain a JWT Token
 
+```bash
+curl -X POST http://localhost:{PORT}/api/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "jane@example.com", "password": "securePass123"}'
+# Returns a JWT token for authenticated requests
+```
+
+### Retrieve Events with Pagination and Filtering
+
+```bash
+# Paginated event listing
+curl "http://localhost:{PORT}/api/events?page=1&limit=10"
+
+# Filter by category
+curl "http://localhost:{PORT}/api/events?category=concerts"
+
+# Filter by date range
+curl "http://localhost:{PORT}/api/events?startDate=2024-01-01&endDate=2024-12-31"
+```
+
+### Book an Event (Authenticated)
+
+```bash
+curl -X POST http://localhost:{PORT}/api/events/book/{eventId} \
+  -H "Authorization: Bearer <JWT_TOKEN>"
+```
+
+### Access Admin-Only Endpoints
+
+The authentication middleware supports role-based access. Pass the allowed roles as an array:
+
+```javascript
+const { auth } = require('./middlewares/auth');
+
+// Admin-only route
+router.delete('/:id', auth(['admin']), async (req, res) => { ... });
+
+// Any authenticated user
+router.get('/account', auth(), async (req, res) => { ... });
+```
+
+## Additional Documentation
+
+- [API Documentation](api_documentation.yaml) - Generated API reference with endpoint schemas and request/response details

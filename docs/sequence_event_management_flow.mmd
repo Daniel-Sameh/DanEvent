@@ -1,0 +1,47 @@
+sequenceDiagram
+    %% source: chunk #1 index.js
+    participant ExpressApp as Express app
+    
+    %% source: chunk #6 index.js, cluster #0 events router
+    participant EventsRouter as Events router
+    
+    %% source: chunk #5 services/cloudinaryService.js
+    participant CloudinaryService as CloudinaryService
+    
+    %% source: chunk #2 Cluster_5 Redis client
+    participant Redis as Redis cache
+    
+    %% source: chunk #5 shared/APIError.js
+    participant APIError as APIError class
+    
+    %% Simplified event creation flow with image upload and caching
+    %% Based on architectural components described in context
+    
+    ExpressApp->>EventsRouter: Event request handling
+    activate EventsRouter
+    
+    EventsRouter->>CloudinaryService: uploadImage data
+    activate CloudinaryService
+    CloudinaryService-->>EventsRouter: Return image URL
+    deactivate CloudinaryService
+    
+    alt Image upload succeeded
+        EventsRouter->>Redis: Cache event data
+        activate Redis
+        Redis-->>EventsRouter: Cache confirmation
+        deactivate Redis
+        EventsRouter-->>ExpressApp: Success response
+    else Validation error
+        EventsRouter->>APIError: Create error response
+        activate APIError
+        APIError-->>EventsRouter: Error object
+        deactivate APIError
+        EventsRouter-->>ExpressApp: Error response
+    end
+    
+    deactivate EventsRouter
+    
+    %% Notes on key architectural features
+    note over EventsRouter: Handles pagination#59; filtering#59; bookings
+    note left of ExpressApp: Configured with CORS#59; rate limiting#59; security headers
+    note right of CloudinaryService: Singleton service for image operations
